@@ -1,5 +1,5 @@
 {
-    "base_path":"/home/plymper/MapGraphs/MapGraphData/Train_Validation",
+    "base_path":"/home/plymper/data/MapGraphData/Train_Validation",
     "train_path":"novelgridworlds_no_nov_1_easy",
     "valid_path":"validation",
     "test_path":"test",
