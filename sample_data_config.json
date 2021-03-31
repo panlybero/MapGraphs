@@ -1,0 +1,13 @@
+{
+    "base_path":"/media/panagiotis/TOSHIBA EXT1/Research/Novelty_detection/datasets/gridworlds_data/",
+    "train_path":"novelgridworlds_no_nov_1_easy",
+    "valid_path":"validation",
+    "test_path":"test",
+    "model_save_path":"models",
+    "model_predictor":"agent",
+    "batch_size":100
+
+
+
+
+}

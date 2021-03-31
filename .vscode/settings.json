@@ -1,0 +1,4 @@
+{
+    "jupyter.jupyterServerType": "local",
+    "python.pythonPath": "/home/panagiotis/.conda/envs/dgl/bin/python"
+}

@@ -33,20 +33,70 @@ torch.manual_seed(0)
 
 #model_predictor = "both"
 
+import torch.multiprocessing as multp
+
+def _unit_3DMap(k,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes, graph_start_index):
+
+    elements=  torch.unique(mp[k])
+    rep_map_k = torch.zeros(rep_map[k].shape).to('cpu')
+    for e in elements:
+        if e != -1: 
+            
+            v = graph_representations[graph_start_index+e.int()]
+            rep_map_k[mp[k]==e]=v.float()
+            
+            if e==0:
+                agent_representations_original[k] = v
+
+    rep_map[k] =rep_map_k
+        
+    graph_start_index+=batch_num_nodes[k]
+
+def _segment_3DMap(m,n,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes, graph_start_index):
+    for k in range(m,n):
+        _unit_3DMap(k,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes, graph_start_index)
+
+def _parallel_3DMap(segment_size,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes, graph_start_index):
+    pool = multp.Pool()
+    args = [(k,k+segment_size,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes, graph_start_index) for k in range(0,mp.shape[0],segment_size)]
+    pool.starmap(_segment_3DMap,args)
 
 
 
-def _build3DMap(mp, graph_representations,graph_emb_size, batch_num_nodes):
+
+def _build3DMap(mp, graph_representations,graph_emb_size, batch_num_nodes, device = 'cuda'):
     
     #doing the loop on cpu is actually faster
-    rep_map = torch.zeros((*mp.shape,graph_emb_size)).to('cpu').float()
+    rep_map = torch.zeros((*mp.shape,graph_emb_size)).to(device).float()
         
-    agent_representations = torch.zeros((mp.shape[0], 64+graph_emb_size)).to('cpu')
-    agent_representations_original = torch.zeros((mp.shape[0], graph_emb_size)).to('cpu')
+    agent_representations = torch.zeros((mp.shape[0], 64+graph_emb_size)).to(device)
+    agent_representations_original = torch.zeros((mp.shape[0], graph_emb_size)).to(device)
     graph_start_index = 0
-    graph_representations = graph_representations.to('cpu')
+    graph_representations = graph_representations.to(device)
+    #mp = mp.cpu()
+    #_parallel_3DMap(50,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes, graph_start_index)
 
+
+    #maybe: reps = tensor(unique_element_idx,graph_index,representation)
+    # for e: rep_map[where(rep_map == e)) =  reps[]
+    
+    unique_elements = torch.unique(mp).to(device)
+    reps = torch.zeros((torch.max(unique_elements).int(),mp.shape[0],graph_emb_size)).to(device)
+    graph_start_idxs = torch.tensor([torch.sum(batch_num_nodes[:i]) for i in range(mp.shape[0])]).to(device)
+    
+    for e in unique_elements:
+        if(e!=-1):
+            tmp = torch.where(mp == e)
+            
+            graph_idxs = graph_start_idxs[tmp[0]]
+            element_idxs = graph_idxs+e.int()
+            
+            rep_map[tmp[0],tmp[1],tmp[2]] = graph_representations[element_idxs]
+
+    
+    '''
     for k in range(mp.shape[0]):  # This may be inefficient but I found no better way to construct the 3D maps. 
+        #_unit_3DMap(k,mp,rep_map,graph_representations,agent_representations_original,batch_num_nodes,graph_start_index)
         
         elements=  torch.unique(mp[k])
         rep_map_k = torch.zeros(rep_map[k].shape).to('cpu')
@@ -62,6 +112,8 @@ def _build3DMap(mp, graph_representations,graph_emb_size, batch_num_nodes):
         rep_map[k] =rep_map_k
         
         graph_start_index+=batch_num_nodes[k]
+    
+        '''
             
 
     return rep_map,agent_representations_original, agent_representations
@@ -154,13 +206,22 @@ class MapGraphModel(torch.nn.Module):
         rep_map = self.Conv(rep_map)
         
 
-
+        '''
         for k in range(mp.shape[0]):
             v = torch.transpose(rep_map[k][:,mp[k]==0], 0 , 1)
             u = torch.reshape(agent_representations_original[k],(1,self.graph_emb_size))
             
             agent_representations[k] = torch.cat([v,u],1)
+        '''
+        
+        tmp= torch.where(mp==0)
+        v = rep_map[tmp[0],:,tmp[1],tmp[2]]
+        #print(v.shape)
+        u = torch.reshape(agent_representations_original,(mp.shape[0],self.graph_emb_size))
+        #print(u.shape)
 
+
+        agent_representations= torch.cat([v,u],1)
 
         return rep_map, agent_representations
 
@@ -404,3 +465,5 @@ def validate_model(model, loader, return_data = False):
     if return_data:
         return precision_score(targets,y), recall_score(targets,y), f1_score(targets,y) , accuracy_score(targets,y), X,y,preds
     return precision_score(targets,y), recall_score(targets,y), f1_score(targets,y) , accuracy_score(targets,y)
+
+
